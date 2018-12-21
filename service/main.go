@@ -21,8 +21,8 @@ const (
 	DISTANCE   = "200km"
 
 	// Needs to update this URL if deploied to cloud.
-	ES_URL      = "http://35.237.119.162:9200"
-	BUCKET_NAME = "asuna-post-image-233"
+	ES_URL      = "http://35.243.182.162:9200"
+	BUCKET_NAME = "around-bucket"
 )
 
 type Location struct {
