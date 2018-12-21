@@ -21,7 +21,7 @@ const (
 	DISTANCE   = "200km"
 
 	// Needs to update this URL if deploied to cloud.
-	ES_URL      = "http://35.237.107.132:9200"
+	ES_URL      = "http://35.237.119.162:9200"
 	BUCKET_NAME = "asuna-post-image-233"
 )
 
@@ -158,9 +158,9 @@ func saveToGCS(r io.Reader, bucketName, objectName string) (*storage.ObjectAttrs
 		return nil, err
 	}
 
-	// if err = object.ACL().Set(ctx, storage.AllUsers, storage.RoleReader); err != nil {
-	// 	return nil, err
-	// }
+	if err = object.ACL().Set(ctx, storage.AllUsers, storage.RoleReader); err != nil {
+		return nil, err
+	}
 
 	attrs, err := object.Attrs(ctx)
 	if err != nil {
