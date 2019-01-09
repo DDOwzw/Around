@@ -12,7 +12,10 @@ import (
 
 	"cloud.google.com/go/bigtable"
 	"cloud.google.com/go/storage"
+	jwtmiddleware "github.com/auth0/go-jwt-middleware"
+	jwt "github.com/dgrijalva/jwt-go"
 	"github.com/google/uuid"
+	"github.com/gorilla/mux"
 	"github.com/olivere/elastic"
 	"google.golang.org/api/option"
 )
@@ -27,10 +30,11 @@ const (
 	BUCKET_NAME = "around-bucket"
 
 	CRED            = "../My Project-23d7224dd687.json"
-	ENABLE_BIGTABLE = true
+	ENABLE_BIGTABLE = false // if set true, will copy data to both ES and bigtable
 
 	BIGTABLE_PROJECT_ID = "my-project-1523483736723"
 	BT_INSTANCE         = "around-post"
+	mySigningKey        = "secret"
 )
 
 type Location struct {
@@ -49,9 +53,22 @@ type Post struct {
 func main() {
 	fmt.Println("started-service")
 	createIndexIfNotExist()
+	// token varify using jwt lib
+	jwtMiddleware := jwtmiddleware.New(jwtmiddleware.Options{
+		ValidationKeyGetter: func(token *jwt.Token) (interface{}, error) {
+			return []byte(mySigningKey), nil
+		},
+		SigningMethod: jwt.SigningMethodHS256,
+	})
 
-	http.HandleFunc("/post", handlerPost)
-	http.HandleFunc("/search", handlerSearch)
+	r := mux.NewRouter()
+
+	r.Handle("/signup", http.HandlerFunc(handlerSignup)).Methods("POST")
+	r.Handle("/login", http.HandlerFunc(handlerLogin)).Methods("POST")
+	r.Handle("/post", jwtMiddleware.Handler(http.HandlerFunc(handlerPost))).Methods("POST")
+	r.Handle("/search", jwtMiddleware.Handler(http.HandlerFunc(handlerSearch))).Methods("GET")
+
+	http.Handle("/", r)
 	log.Fatal(http.ListenAndServe(":8080", nil))
 }
 
@@ -79,6 +96,18 @@ func createIndexIfNotExist() {
 			}
 		}`
 		_, err = client.CreateIndex(POST_INDEX).Body(mapping).Do(context.Background())
+		if err != nil {
+			panic(err)
+		}
+	}
+
+	exists, err = client.IndexExists(USER_INDEX).Do(context.Background())
+	if err != nil {
+		panic(err)
+	}
+
+	if !exists {
+		_, err = client.CreateIndex(USER_INDEX).Do(context.Background())
 		if err != nil {
 			panic(err)
 		}
@@ -212,6 +241,10 @@ func handlerPost(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.Header().Set("Access-Control-Allow-Headers", "Content-Type,Authorization")
+	// read username from token
+	user := r.Context().Value("user")
+	claims := user.(*jwt.Token).Claims
+	username := claims.(jwt.MapClaims)["username"]
 
 	// decoder := json.NewDecoder(r.Body)
 	// var p Post
@@ -225,7 +258,7 @@ func handlerPost(w http.ResponseWriter, r *http.Request) {
 	lon, _ := strconv.ParseFloat(r.FormValue("lon"), 64)
 
 	p := &Post{
-		User:    r.FormValue("user"),
+		User:    username.(string),
 		Message: r.FormValue("message"),
 		Location: Location{
 			Lat: lat,
